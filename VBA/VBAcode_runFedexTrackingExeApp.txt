@@ -1,0 +1,144 @@
+Private Sub cmdSubmit_Click()
+
+    Dim userPassword As String
+    Dim correctPassword As String
+    
+    correctPassword = "0701"  ' Replace with your actual password
+    
+    ' Get the entered password from the TextBox
+    userPassword = txtPassword.Text
+    
+    ' Check if the password is empty
+    If Len(userPassword) = 0 Then
+        MsgBox "Password cannot be empty. Please enter a valid password.", vbCritical
+    End If
+    
+    ' Check if the password is correct
+    If userPassword = correctPassword Then
+        ' Hide the UserForm if the password is correct
+        Me.Hide
+       ' Call the PerformFetchUpdates subroutine to run the fetch updates logic
+        Call PerformFetchUpdates
+    Else
+        MsgBox "Incorrect password. Access denied.", vbCritical
+    End If
+
+End Sub
+
+
+
+Private Sub PerformFetchUpdates()
+
+    Dim ws As Worksheet
+    Dim statusColumn As Range
+    Dim trackingNumberColumn As Range
+    Dim statusCell As Range
+    Dim trackingNumberCell As Range
+    Dim trackingNumbersInPrg As String
+    Dim txtFilePath As String
+    Dim txtFile As Integer
+    Dim i As Long
+    Dim exePath As String
+    Dim workingDir As String
+    Dim lookupWorkbook As Workbook
+    Dim lookupSheet As Worksheet
+    Dim lookupRange As Range
+    Dim trackingResultsFilePath As String
+    Dim result As Variant
+    Dim lookupValue As Variant
+    Dim userName As String
+    Dim wsh As Object ' Declare WScript.Shell object
+    
+    ' Get the current user's name from the environment
+    userName = Environ("USERNAME")
+    
+    ' Set worksheet reference
+    Set ws = ThisWorkbook.Sheets("Tracking")
+    
+    ' Define the range for the "Status" and "Tracking Number" columns
+    Set statusColumn = ws.Range("I6:I" & ws.Cells(ws.Rows.Count, "I").End(xlUp).Row) ' assuming "Status" is in column I
+    Set trackingNumberColumn = ws.Range("E6:E" & ws.Cells(ws.Rows.Count, "E").End(xlUp).Row) ' assuming "Tracking Number" is in column E
+    
+    ' Initialize an empty string to hold the tracking numbers
+    trackingNumbersInPrg = ""
+    
+    ' Loop through each status cell and check for "In Progress"
+    For Each statusCell In statusColumn
+        If statusCell.Value = "In Progress" Then
+            ' Find the corresponding tracking number for this row
+            Set trackingNumberCell = trackingNumberColumn.Cells(statusCell.Row - statusColumn.Row + 1)
+            trackingNumbersInPrg = trackingNumbersInPrg & trackingNumberCell.Value & vbCrLf
+        End If
+    Next statusCell
+    
+    ' Build the dynamic paths
+    txtFilePath = "C:\Users\" & userName & "\OneDrive - 5pworld.com\SHIPMENT REPORT\Shipment Tracking App\1. Tracking Numbers.txt"
+    
+    ' Clear the existing contents of the text file
+    txtFile = FreeFile
+    Open txtFilePath For Output As txtFile
+    Close txtFile
+    
+    ' Write the tracking numbers to the text file
+    If Len(trackingNumbersInPrg) > 0 Then
+        txtFile = FreeFile
+        Open txtFilePath For Output As txtFile
+        Print #txtFile, trackingNumbersInPrg
+        Close txtFile
+    End If
+    
+    ' Set the path to the directory and executable
+    exePath = """C:\Users\" & userName & "\OneDrive - 5pworld.com\SHIPMENT REPORT\Shipment Tracking App\FedExDHLTrackingProgram.exe"""
+    workingDir = """C:\Users\" & userName & "\OneDrive - 5pworld.com\SHIPMENT REPORT\Shipment Tracking App\"""
+    
+    ' Create WScript.Shell object to run the executable synchronously
+    Set wsh = CreateObject("WScript.Shell")
+    
+    ' Run the executable in Command Prompt, changing to the correct directory first and wait for it to finish
+    wsh.Run "cmd.exe /K cd " & workingDir & " && " & exePath, 1, True
+    
+    ' Define the path for the "Tracking Results.csv" file located in the "Shipment Tracking App" directory
+    trackingResultsFilePath = "C:\Users\" & userName & "\OneDrive - 5pworld.com\SHIPMENT REPORT\Shipment Tracking App\3. Tracking Results.csv"
+    
+    ' Open the "Tracking Results.csv" workbook
+    Set lookupWorkbook = Workbooks.Open(trackingResultsFilePath)
+    Set lookupSheet = lookupWorkbook.Sheets(1) ' Assuming the "Tracking Results" is in the first sheet
+    Set lookupRange = lookupSheet.Range("A:B") ' Looking up in columns A and B of the "Tracking Results.csv"
+    
+    ' Loop through each row in the "Original Shipment Report" (ThisWorkbook) for column E (Tracking Number)
+    For Each statusCell In statusColumn
+    If statusCell.Value = "In Progress" Then
+        ' Get the tracking number from column E of the "Original Shipment Report"
+        lookupValue = ws.Cells(statusCell.Row, "E").Value
+        
+        ' Error handling
+        On Error Resume Next  ' Ignore errors temporarily
+        result = Application.WorksheetFunction.VLookup(lookupValue, lookupRange, 2, False)
+        
+        ' If an error occurs (like VLookup failing), handle it here
+        If Err.Number <> 0 Then
+            result = CVErr(xlErrNA) ' Assign #N/A error to result if VLookup fails
+            Debug.Print "Error: " & Err.Description
+            Err.Clear ' Clear the error after handling
+        End If
+        
+        On Error GoTo 0 ' Restore normal error handling
+         If IsError(result) Then
+                ws.Cells(statusCell.Row, "J").Value = "Not Found" ' In case there's no match or error
+            Else
+                ws.Cells(statusCell.Row, "J").Value = result ' If result is found, paste the value into column J
+            End If
+        
+    End If
+    Next statusCell
+    
+    ' Optionally, you can close the "Tracking Results.csv" workbook after processing
+    lookupWorkbook.Close SaveChanges:=False
+
+    
+End Sub
+
+
+Private Sub UserForm_Click()
+
+End Sub
